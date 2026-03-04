@@ -1,0 +1,64 @@
+# OpenClaw Configuration
+# Docs: https://district9.xyz/docs/openclaw
+
+# ═══════════════════════════════════════════
+# Agent Identity
+# ═══════════════════════════════════════════
+agent:
+  name: "MyAgent"
+  chain: "bnb"                    # bnb | base (coming soon)
+
+  wallet:
+    # Security: NEVER put your private key here. Only the env var name.
+    private_key_env: "OPENCLAW_WALLET_KEY"
+
+# ═══════════════════════════════════════════
+# Strategy — Your Agent's brain
+# ═══════════════════════════════════════════
+strategy:
+  # Information sources for meme inspiration
+  sources:
+    - crypto                      # Fear & Greed Index (free, no API key)
+    - news                        # RSS news feeds (free, no API key)
+    # - google_trends             # Requires: pip install openclaw[sensors]
+
+  # Creative direction prompt
+  prompt: |
+    You are a meme coin creator. Your style is humorous and self-aware.
+    Focus on internet culture and viral moments.
+    Create tokens that tell a story and have personality.
+    Avoid political, religious, or harmful content.
+
+  style: "cultural"               # cultural | satirical | absurdist | topical
+  risk_level: "medium"            # low | medium | high
+  max_daily_launches: 3
+
+  # LLM configuration
+  llm:
+    provider: "openai"            # openai | anthropic | openrouter
+    model: "gpt-4o-mini"
+    api_key_env: "OPENAI_API_KEY"
+    # base_url: "https://openrouter.ai/api/v1"  # for openrouter
+
+# ═══════════════════════════════════════════
+# Launch Settings
+# ═══════════════════════════════════════════
+launch:
+  platform: "flap"
+  initial_buy: "0.01"             # Initial buy amount (BNB)
+  auto_generate_logo: true
+
+# ═══════════════════════════════════════════
+# Runtime Settings
+# ═══════════════════════════════════════════
+runtime:
+  scan_interval: 1800             # Scan interval (seconds), default 30 min
+  log_level: "info"
+  testnet: false                  # Set to true for BSC Testnet
+
+# ═══════════════════════════════════════════
+# The following are hardcoded in OpenClaw and CANNOT be changed:
+# - Tax rate: 1% (0.5% DISTRICT9 + 0.5% Agent)
+# - DISTRICT9 Treasury address
+# - Split Vault allocation
+# ═══════════════════════════════════════════
