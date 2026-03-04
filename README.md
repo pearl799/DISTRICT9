@@ -1,4 +1,4 @@
-# DISTRICT9 Agent Token Launcher
+# 🦞DISTRICT9 Agent Token Launcher
 
 Autonomous meme token launcher on BNB Chain, powered by AI agents running on [OpenClaw](https://openclaw.ai).
 
