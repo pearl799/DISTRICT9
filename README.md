@@ -44,8 +44,8 @@ Sensing ─── Brain ─── Creator ─── Launcher
 ### Install
 
 ```bash
-git clone https://github.com/aspect-building/openclaw-py.git
-cd openclaw-py
+git clone https://github.com/pearl799/DISTRICT9.git
+cd DISTRICT9
 uv sync
 ```
 
