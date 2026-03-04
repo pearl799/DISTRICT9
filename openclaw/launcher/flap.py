@@ -159,7 +159,47 @@ class FlapLauncher:
             "d9_agent_url": f"{D9_BASE_URL}/agent/{self.account.address}",
         })
 
+        # Submit metadata to DISTRICT9 website
+        self._submit_metadata(token_addr, metadata, cid, result["tx_hash"])
+
         return result
+
+    def _submit_metadata(self, token_addr: str, metadata: dict, cid: str, tx_hash: str):
+        """Submit token metadata to DISTRICT9 website for DB indexing."""
+        import re
+
+        agent_tag = ""
+        match = re.search(r"\[D9:([^\]]+)\]", metadata.get("description", ""))
+        if match:
+            agent_tag = f"[D9:{match.group(1)}]"
+
+        payload = {
+            "json": {
+                "address": token_addr,
+                "name": metadata["name"],
+                "symbol": metadata["symbol"],
+                "ipfsCid": cid,
+                "logoUrl": f"https://flap.mypinata.cloud/ipfs/{cid}",
+                "description": metadata.get("description", ""),
+                "creator": self.account.address,
+                "agentTag": agent_tag,
+                "txHash": tx_hash,
+                "mode": "a",
+            }
+        }
+
+        try:
+            resp = requests.post(
+                f"{D9_BASE_URL}/api/trpc/tokens.submit",
+                json=payload,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                log.info("Metadata submitted to DISTRICT9 website")
+            else:
+                log.warning(f"Metadata submit failed: {resp.status_code} {resp.text}")
+        except Exception as e:
+            log.warning(f"Metadata submit failed: {e}")
 
     def _upload_to_ipfs(self, metadata: dict, image_path: str = "") -> str:
         """Upload token metadata to Flap's IPFS via GraphQL mutation."""
