@@ -20,7 +20,16 @@ from .constants import (
     FLAP_UPLOAD_API,
 )
 
-# D9Portal ABI — createToken + buy + TokenCreated event
+# Minimal ERC20 ABI for approve + balanceOf
+ERC20_ABI = [
+    {"inputs": [{"name": "account", "type": "address"}], "name": "balanceOf",
+     "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"name": "spender", "type": "address"}, {"name": "amount", "type": "uint256"}],
+     "name": "approve", "outputs": [{"name": "", "type": "bool"}],
+     "stateMutability": "nonpayable", "type": "function"},
+]
+
+# D9Portal ABI — createToken + buy + sell + TokenCreated event
 D9_PORTAL_ABI = [
     {
         "inputs": [
@@ -50,6 +59,17 @@ D9_PORTAL_ABI = [
         "name": "buy",
         "outputs": [],
         "stateMutability": "payable",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"name": "token", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+            {"name": "minBnbOut", "type": "uint256"},
+        ],
+        "name": "sell",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function",
     },
     {
@@ -106,6 +126,11 @@ class District9Launcher:
         if quote_amt > 0:
             self._send_buy_tx(token_addr, quote_amt)
 
+        # Step 5: Auto-sell (if configured)
+        if self.config.launch.auto_sell and quote_amt > 0:
+            pct = self.config.launch.sell_percentage
+            self._send_sell_tx(token_addr, percentage=pct)
+
         # Add convenience URLs
         explorer = self.chain["explorer"]
         result.update({
@@ -117,7 +142,7 @@ class District9Launcher:
             "d9_agent_url": f"{D9_BASE_URL}/agent/{self.account.address}",
         })
 
-        # Step 5: Submit metadata to DISTRICT9 website
+        # Step 6: Submit metadata to DISTRICT9 website
         self._submit_metadata(token_addr, metadata, cid, result["tx_hash"])
 
         return result
@@ -366,3 +391,61 @@ class District9Launcher:
             raise RuntimeError(f"Buy TX reverted! {tx_hash.hex()}")
 
         log.info(f"Buy confirmed in block {receipt['blockNumber']} (gas: {receipt['gasUsed']})")
+
+    def sell(self, token_addr: str, percentage: int = 100):
+        """Public method: sell tokens back to D9Portal bonding curve."""
+        self._send_sell_tx(token_addr, percentage=percentage)
+
+    def _send_sell_tx(self, token_addr: str, percentage: int = 100):
+        """Approve tokens and sell back to D9Portal bonding curve."""
+        wallet = self.account.address
+        token_addr = Web3.to_checksum_address(token_addr)
+        d9_portal_addr = Web3.to_checksum_address(self.chain["d9_portal"])
+
+        token = self.w3.eth.contract(address=token_addr, abi=ERC20_ABI)
+        balance = token.functions.balanceOf(wallet).call()
+
+        if balance == 0:
+            log.info(f"No tokens to sell for {token_addr}")
+            return
+
+        sell_amount = balance * percentage // 100
+        log.info(f"Selling {percentage}% ({self.w3.from_wei(sell_amount, 'ether')} tokens) of {token_addr}...")
+
+        # Approve
+        nonce = self.w3.eth.get_transaction_count(wallet)
+        approve_tx = token.functions.approve(d9_portal_addr, sell_amount).build_transaction({
+            "from": wallet, "gas": 100_000,
+            "gasPrice": self.w3.eth.gas_price,
+            "nonce": nonce, "chainId": self.w3.eth.chain_id,
+        })
+        signed = self.w3.eth.account.sign_transaction(approve_tx, self.account.key)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+        self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+        log.info("Approve confirmed")
+
+        # Sell
+        portal = self.w3.eth.contract(address=d9_portal_addr, abi=D9_PORTAL_ABI)
+        nonce = self.w3.eth.get_transaction_count(wallet)
+
+        try:
+            gas_est = portal.functions.sell(token_addr, sell_amount, 0).estimate_gas({"from": wallet})
+            gas_limit = int(gas_est * 1.3)
+        except Exception as e:
+            log.warning(f"Sell gas estimation failed ({e}), using 500K")
+            gas_limit = 500_000
+
+        sell_tx = portal.functions.sell(token_addr, sell_amount, 0).build_transaction({
+            "from": wallet, "gas": gas_limit,
+            "gasPrice": self.w3.eth.gas_price,
+            "nonce": nonce, "chainId": self.w3.eth.chain_id,
+        })
+        signed = self.w3.eth.account.sign_transaction(sell_tx, self.account.key)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+        log.info(f"Sell TX sent: {tx_hash.hex()}")
+
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(f"Sell TX reverted! {tx_hash.hex()}")
+
+        log.info(f"Sell confirmed in block {receipt['blockNumber']} (gas: {receipt['gasUsed']})")

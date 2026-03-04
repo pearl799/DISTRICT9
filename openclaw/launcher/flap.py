@@ -24,6 +24,30 @@ from .constants import (
     TAX_TOKEN_SUFFIX,
 )
 
+# Minimal ERC20 ABI for approve + balanceOf
+ERC20_ABI = [
+    {"inputs": [{"name": "account", "type": "address"}], "name": "balanceOf",
+     "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"name": "spender", "type": "address"}, {"name": "amount", "type": "uint256"}],
+     "name": "approve", "outputs": [{"name": "", "type": "bool"}],
+     "stateMutability": "nonpayable", "type": "function"},
+]
+
+# Flap Portal sell ABI — sell on bonding curve (Portal, not VaultPortal)
+PORTAL_SELL_ABI = [
+    {
+        "inputs": [
+            {"name": "token", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+            {"name": "minAmountOut", "type": "uint256"},
+        ],
+        "name": "sell",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+]
+
 # VaultPortal ABI — newTaxTokenWithVault (Split Vault for 50/50 tax split)
 VAULT_PORTAL_ABI = [
     {
@@ -146,9 +170,14 @@ class FlapLauncher:
         quote_amt = self.w3.to_wei(float(self.config.launch.initial_buy), "ether")
         result = self._send_launch_tx(metadata, cid, salt, quote_amt)
 
+        # Step 4: Auto-sell (if configured)
+        token_addr = result["contract_address"]
+        if self.config.launch.auto_sell and quote_amt > 0:
+            pct = self.config.launch.sell_percentage
+            self._send_sell_tx(token_addr, percentage=pct)
+
         # Add convenience URLs
         explorer = self.chain["explorer"]
-        token_addr = result["contract_address"]
         result.update({
             "predicted_address": predicted_addr,
             "ipfs_cid": cid,
@@ -406,3 +435,18 @@ class FlapLauncher:
             "block_number": receipt["blockNumber"],
             "gas_used": receipt["gasUsed"],
         }
+
+    def sell(self, token_addr: str, percentage: int = 100):
+        """Public method: sell tokens. Flap Portal sell is RBAC-gated, must use flap.sh UI."""
+        log.warning(
+            f"Mode A (Flap) tokens cannot be sold directly via SDK — "
+            f"Flap Portal has RBAC access control. "
+            f"Sell through https://flap.sh/bnb/{token_addr}"
+        )
+
+    def _send_sell_tx(self, token_addr: str, percentage: int = 100):
+        """Auto-sell not available for Mode A — Flap Portal sell() is role-gated."""
+        log.warning(
+            f"Auto-sell skipped: Flap Portal sell() requires authorized Router. "
+            f"Sell manually at https://flap.sh/bnb/{token_addr}"
+        )

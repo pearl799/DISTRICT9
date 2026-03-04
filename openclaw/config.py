@@ -39,6 +39,8 @@ class LaunchConfig:
     platform: str
     initial_buy: str
     auto_generate_logo: bool
+    auto_sell: bool = False
+    sell_percentage: int = 100
 
 
 @dataclass
@@ -107,6 +109,8 @@ def load_config(path: str | Path | None = None) -> OpenClawConfig:
             platform=raw.get("launch", {}).get("platform", "flap"),
             initial_buy=raw.get("launch", {}).get("initial_buy", "0.01"),
             auto_generate_logo=raw.get("launch", {}).get("auto_generate_logo", True),
+            auto_sell=raw.get("launch", {}).get("auto_sell", False),
+            sell_percentage=raw.get("launch", {}).get("sell_percentage", 100),
         ),
         scan_interval=raw.get("runtime", {}).get("scan_interval", 1800),
         testnet=raw.get("runtime", {}).get("testnet", False),

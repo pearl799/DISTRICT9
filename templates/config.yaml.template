@@ -47,6 +47,8 @@ launch:
   platform: "flap"
   initial_buy: "0.01"             # Initial buy amount (BNB)
   auto_generate_logo: true
+  auto_sell: false                # Sell tokens immediately after launch
+  sell_percentage: 100            # Percentage of tokens to sell (1-100)
 
 # ═══════════════════════════════════════════
 # Runtime Settings
