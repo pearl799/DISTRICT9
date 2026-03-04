@@ -165,6 +165,7 @@ class FlapLauncher:
         # /token/{token_addr} for token detail, /agent/{wallet_addr} for agent profile
         metadata["website"] = f"{D9_BASE_URL}/token/{predicted_addr}"
         cid = self._upload_to_ipfs(metadata, image_path)
+        image_cid = self._resolve_image_cid(cid)
 
         # Step 3: Build and send transaction
         quote_amt = self.w3.to_wei(float(self.config.launch.initial_buy), "ether")
@@ -181,6 +182,7 @@ class FlapLauncher:
         result.update({
             "predicted_address": predicted_addr,
             "ipfs_cid": cid,
+            "image_cid": image_cid,
             "explorer_tx": f"{explorer}/tx/{result['tx_hash']}",
             "explorer_token": f"{explorer}/token/{token_addr}",
             "flap_url": f"https://flap.sh/bnb/{token_addr}",
@@ -189,11 +191,27 @@ class FlapLauncher:
         })
 
         # Submit metadata to DISTRICT9 website
-        self._submit_metadata(token_addr, metadata, cid, result["tx_hash"])
+        self._submit_metadata(token_addr, metadata, cid, image_cid, result["tx_hash"])
 
         return result
 
-    def _submit_metadata(self, token_addr: str, metadata: dict, cid: str, tx_hash: str):
+    @staticmethod
+    def _resolve_image_cid(metadata_cid: str) -> str:
+        """Fetch IPFS metadata JSON and extract the actual image CID."""
+        try:
+            resp = requests.get(
+                f"https://flap.mypinata.cloud/ipfs/{metadata_cid}", timeout=10
+            )
+            if resp.status_code == 200:
+                image = resp.json().get("image", "")
+                if image:
+                    log.info(f"Image CID resolved: {image}")
+                    return image
+        except Exception:
+            pass
+        return metadata_cid  # fallback to metadata CID
+
+    def _submit_metadata(self, token_addr: str, metadata: dict, cid: str, image_cid: str, tx_hash: str):
         """Submit token metadata to DISTRICT9 website for DB indexing."""
         import re
 
@@ -208,7 +226,7 @@ class FlapLauncher:
                 "name": metadata["name"],
                 "symbol": metadata["symbol"],
                 "ipfsCid": cid,
-                "logoUrl": f"https://flap.mypinata.cloud/ipfs/{cid}",
+                "logoUrl": f"https://flap.mypinata.cloud/ipfs/{image_cid}",
                 "description": metadata.get("description", ""),
                 "creator": self.account.address,
                 "agentTag": agent_tag,
