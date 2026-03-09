@@ -8,3 +8,17 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Secrets — NEVER commit these
+.env
+.env.*
+wallet.json
+private.key
+*.pem
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store

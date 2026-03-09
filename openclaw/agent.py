@@ -132,6 +132,9 @@ class Agent:
             symbol=best.symbol,
             narrative=best.narrative,
             logo_url="",  # will be set during IPFS upload
+            website=self.config.launch.website,
+            twitter=self.config.launch.twitter,
+            telegram=self.config.launch.telegram,
         )
 
         # LAUNCH

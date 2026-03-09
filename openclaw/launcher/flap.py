@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 
 import requests
@@ -23,6 +24,11 @@ from .constants import (
     TAX_DURATION,
     TAX_TOKEN_SUFFIX,
 )
+
+# ── Retry / validation constants ──────────────────────────────
+IPFS_MAX_RETRIES = 3
+IPFS_RETRY_DELAY = 2  # seconds
+TX_RECEIPT_TIMEOUT = 120  # seconds
 
 # Minimal ERC20 ABI for approve + balanceOf
 ERC20_ABI = [
@@ -148,13 +154,42 @@ class FlapLauncher:
         if not self.w3.is_connected():
             raise ConnectionError(f"Cannot connect to {self.chain['rpc']}")
 
+    # ── Validation helpers ─────────────────────────────────────
+
+    @staticmethod
+    def _validate_metadata(metadata: dict):
+        """Validate token metadata before launch."""
+        name = metadata.get("name", "")
+        symbol = metadata.get("symbol", "")
+        if not name or len(name) > 32:
+            raise ValueError(f"Invalid token name: must be 1-32 chars, got '{name}'")
+        if not symbol or len(symbol) > 10 or not symbol.isalnum():
+            raise ValueError(f"Invalid symbol: must be 1-10 alphanumeric chars, got '{symbol}'")
+
+    def _check_gas_price(self):
+        """Abort if gas price exceeds configured maximum."""
+        max_gwei = self.config.launch.max_gas_gwei
+        if max_gwei <= 0:
+            return
+        current = self.w3.eth.gas_price
+        current_gwei = current / 1e9
+        if current_gwei > max_gwei:
+            raise RuntimeError(
+                f"Gas price too high: {current_gwei:.1f} gwei > {max_gwei} gwei limit. "
+                f"TX aborted to protect funds."
+            )
+
     def launch(self, metadata: dict, image_path: str = "") -> dict:
         """
         Launch a token through Flap VaultPortal with Split Vault.
 
         Tax split: 0.5% DISTRICT9 + 0.5% Agent wallet (hardcoded).
-        Flow: Find salt → Set website URL → Upload IPFS → Deploy on-chain.
+        Flow: Validate → Find salt → Set website URL → Upload IPFS → Deploy on-chain.
         """
+        # Step 0: Validate inputs and gas price
+        self._validate_metadata(metadata)
+        self._check_gas_price()
+
         # Step 1: Find CREATE2 salt (vanity address ending in 7777)
         # VaultPortal delegates token creation to Portal, so CREATE2 deployer is Portal
         token_impl = self.chain["tax_token_v1_impl"]
@@ -163,7 +198,8 @@ class FlapLauncher:
 
         # Step 2: Inject token detail page URL, then upload metadata to IPFS
         # /token/{token_addr} for token detail, /agent/{wallet_addr} for agent profile
-        metadata["website"] = f"{D9_BASE_URL}/token/{predicted_addr}"
+        if not metadata.get("website"):
+            metadata["website"] = f"{D9_BASE_URL}/token/{predicted_addr}"
         cid = self._upload_to_ipfs(metadata, image_path)
         image_cid = self._resolve_image_cid(cid)
 
@@ -213,8 +249,6 @@ class FlapLauncher:
 
     def _submit_metadata(self, token_addr: str, metadata: dict, cid: str, image_cid: str, tx_hash: str):
         """Submit token metadata to DISTRICT9 website for DB indexing."""
-        import re
-
         agent_tag = ""
         match = re.search(r"\[D9:([^\]]+)\]", metadata.get("description", ""))
         if match:
@@ -292,18 +326,24 @@ class FlapLauncher:
         }
 
         log.info("Uploading metadata to IPFS...")
-        resp = requests.post(FLAP_UPLOAD_API, files=files, timeout=30)
-
-        if resp.status_code != 200:
-            raise RuntimeError(f"IPFS upload failed: {resp.status_code} {resp.text}")
-
-        data = resp.json()
-        if "errors" in data:
-            raise RuntimeError(f"GraphQL errors: {data['errors']}")
-
-        cid = data["data"]["create"]
-        log.info(f"Metadata uploaded: {cid}")
-        return cid
+        last_error = None
+        for attempt in range(1, IPFS_MAX_RETRIES + 1):
+            try:
+                resp = requests.post(FLAP_UPLOAD_API, files=files, timeout=30)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+                if "errors" in data:
+                    raise RuntimeError(f"GraphQL errors: {data['errors']}")
+                cid = data["data"]["create"]
+                log.info(f"Metadata uploaded: {cid}")
+                return cid
+            except Exception as e:
+                last_error = e
+                if attempt < IPFS_MAX_RETRIES:
+                    log.warning(f"IPFS upload attempt {attempt}/{IPFS_MAX_RETRIES} failed: {e}")
+                    time.sleep(IPFS_RETRY_DELAY * attempt)
+        raise RuntimeError(f"IPFS upload failed after {IPFS_MAX_RETRIES} attempts: {last_error}")
 
     def _find_salt(self, token_impl: str, portal: str) -> tuple[bytes, str]:
         """Find CREATE2 salt for vanity address (7777 suffix)."""
@@ -341,6 +381,7 @@ class FlapLauncher:
 
     def _send_launch_tx(self, metadata: dict, cid: str, salt: bytes, quote_amt: int) -> dict:
         """Build, sign, and send the newTaxTokenWithVault transaction."""
+        self._check_gas_price()
         vault_portal_addr = self.chain["vault_portal"]
         vault_portal = self.w3.eth.contract(
             address=Web3.to_checksum_address(vault_portal_addr),
@@ -422,7 +463,7 @@ class FlapLauncher:
         log.info(f"TX sent: {tx_hash.hex()}")
 
         log.info("Waiting for confirmation...")
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TX_RECEIPT_TIMEOUT)
 
         if receipt["status"] != 1:
             raise RuntimeError(f"Transaction reverted! TX: {tx_hash.hex()}")

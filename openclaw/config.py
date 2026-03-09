@@ -41,6 +41,11 @@ class LaunchConfig:
     auto_generate_logo: bool
     auto_sell: bool = False
     sell_percentage: int = 100
+    slippage_bps: int = 500          # 5% default slippage protection
+    max_gas_gwei: int = 0            # 0 = no limit; abort TX if gas > this
+    website: str = ""                # custom website; empty = auto district9.club/token/{addr}
+    twitter: str = ""                # e.g. "https://x.com/YourAgent"
+    telegram: str = ""               # e.g. "https://t.me/YourAgent"
 
 
 @dataclass
@@ -111,6 +116,11 @@ def load_config(path: str | Path | None = None) -> OpenClawConfig:
             auto_generate_logo=raw.get("launch", {}).get("auto_generate_logo", True),
             auto_sell=raw.get("launch", {}).get("auto_sell", False),
             sell_percentage=raw.get("launch", {}).get("sell_percentage", 100),
+            slippage_bps=raw.get("launch", {}).get("slippage_bps", 500),
+            max_gas_gwei=raw.get("launch", {}).get("max_gas_gwei", 0),
+            website=raw.get("launch", {}).get("website", ""),
+            twitter=raw.get("launch", {}).get("twitter", ""),
+            telegram=raw.get("launch", {}).get("telegram", ""),
         ),
         scan_interval=raw.get("runtime", {}).get("scan_interval", 1800),
         testnet=raw.get("runtime", {}).get("testnet", False),

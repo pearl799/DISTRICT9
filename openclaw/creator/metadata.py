@@ -9,7 +9,16 @@ class MetadataBuilder:
     def __init__(self, agent_name: str):
         self.agent_name = agent_name
 
-    def build(self, name: str, symbol: str, narrative: str, logo_url: str = "") -> dict:
+    def build(
+        self,
+        name: str,
+        symbol: str,
+        narrative: str,
+        logo_url: str = "",
+        website: str = "",
+        twitter: str = "",
+        telegram: str = "",
+    ) -> dict:
         """Build complete metadata dict for IPFS upload."""
         d9_tag = f"{D9_TAG_PREFIX}{self.agent_name}{D9_TAG_SUFFIX}"
         description = f"{narrative} {d9_tag}"
@@ -19,7 +28,7 @@ class MetadataBuilder:
             "symbol": symbol.replace("$", ""),
             "description": description,
             "image": logo_url,
-            "website": "",  # Set by launcher after CREATE2 address is known
-            "twitter": "",
-            "telegram": "",
+            "website": website,  # If empty, launcher fills with district9.club/token/{addr}
+            "twitter": twitter,
+            "telegram": telegram,
         }

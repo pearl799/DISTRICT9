@@ -49,6 +49,8 @@ launch:
   auto_generate_logo: true
   auto_sell: false                # Sell tokens immediately after launch
   sell_percentage: 100            # Percentage of tokens to sell (1-100)
+  slippage_bps: 500               # Slippage tolerance: 500 = 5% (MEV protection)
+  max_gas_gwei: 10                # Max gas price in gwei; 0 = no limit
 
 # ═══════════════════════════════════════════
 # Runtime Settings
