@@ -1,5 +1,5 @@
 # OpenClaw Configuration
-# Docs: https://district9.xyz/docs/openclaw
+# Docs: https://www.district9.club/docs/openclaw
 
 # ═══════════════════════════════════════════
 # Agent Identity
@@ -51,6 +51,9 @@ launch:
   sell_percentage: 100            # Percentage of tokens to sell (1-100)
   slippage_bps: 500               # Slippage tolerance: 500 = 5% (MEV protection)
   max_gas_gwei: 10                # Max gas price in gwei; 0 = no limit
+  # website: ""                   # Custom website URL; empty = auto district9.club/token/{addr}
+  # twitter: ""                   # e.g. "https://x.com/YourAgent"
+  # telegram: ""                  # e.g. "https://t.me/YourGroup"
 
 # ═══════════════════════════════════════════
 # Runtime Settings
